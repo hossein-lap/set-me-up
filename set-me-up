@@ -1,0 +1,192 @@
+#!/usr/bin/env perl
+
+use warnings;
+use strict;
+
+# helper functions {{{
+sub logprint {
+    my $message = $_[0];
+    my $level = $_[1];
+
+    if ($level eq 1) {
+        print("$message\n");
+    } elsif ($level eq 2) {
+        warn("$message\n");
+    } elsif ($level eq 3) {
+        die("$message\n");
+    }
+}
+
+sub whoa_wait {
+my $whatnow;
+    my @greetings = (
+        'Alright.',
+        'Whoa wait',
+        'What happend?',
+        'Are you Okay?',
+        'Fine.',
+        'I\'m not gonna do anything',
+        'It is what it is',
+        'After you!',
+        'So that how it ends',
+        'hmmm...',
+    );
+    logprint("\n> $greetings[int rand@greetings]", 2);
+}
+
+sub array_to_string {
+    my @array = $_[0];
+    my $string = join('\\n', @array);
+    $string =~ tr/\n/ /;
+    $string =~ s/ +/ /g;
+    $string =~ s/^ //g;
+    return $string;
+}
+# }}}
+
+# let's stay quiet for now
+# mint {{{
+sub mint {
+    my $err;
+
+    # package list {{{
+    my @packages = q(
+        7zip
+        ansible
+        aria2
+        asciidoctor
+        bc
+        btop
+        build-essential
+        bzip2
+        curl
+        dmz-cursor-theme
+        ed
+        ffmpeg
+        ffmpegthumbnailer
+        fprintd
+        fzf
+        g++
+        gcc
+        gimp
+        git
+        golang
+        gpg
+        gufw
+        imagemagick
+        imagemagick
+        jq
+        lf
+        libyaml-tiny-perl
+        lm-sensors
+        lshw
+        lsof
+        lua5.1
+        lua5.2
+        lua5.3
+        lua5.4
+        lvm2
+        lynx
+        make
+        mg
+        moreutils
+        mupdf-tools
+        neofetch
+        neovim
+        net-tools
+        netcat-openbsd
+        nmap
+        nnn
+        nodejs
+        npm
+        nsxiv
+        ntfs-3g
+        onboard
+        openfortivpn
+        openssh-server
+        openvpn
+        p7zip
+        p7zip-full
+        pandoc
+        pass
+        patch
+        pinentry-curses
+        pipx
+        pkg-config
+        pkgconf
+        pkgconf-bin
+        python-is-python3
+        python3
+        qemu-system
+        qemu-utils
+        qrencode
+        qt5-gtk-platformtheme
+        qt5-gtk2-platformtheme
+        qt5-style-plugin-cleanlooks
+        qt5-style-plugins
+        rake
+        rsync
+        ruby
+        ruby-asciidoctor
+        ruby-asciidoctor-include-ext
+        ruby-asciidoctor-pdf
+        ruby-pygments.rb
+        ruby-rouge
+        simplescreenrecorder
+        sshfs
+        texlive-fonts-recommended
+        texlive-latex-base
+        texlive-latex-extra
+        texlive-latex-recommended
+        texlive-xetex
+        tmux
+        tmuxinator
+        udisks2
+        ufw
+        unrar
+        unzip
+        vim
+        virt-manager
+        virt-viewer
+        wget
+        xclip
+        xsel
+        xwallpaper
+        xz-utils
+        yad
+        yq
+        yt-dlp
+        zathura
+        zathura-pdf-poppler
+        zip
+        zsh
+        zstd
+    );
+    # }}}
+
+    my $package_list = array_to_string(@packages);
+
+    # logprint("\n==== Updating Repositories ====\n", 2);
+    # $err = system("sudo", "apt", "update", "-y");
+    # if ($err) {
+    #     whoa_wait();
+    #     exit $err / 255;
+    # }
+
+    logprint("\n==== Installing Packages ====\n", 2);
+    logprint("sudo apt install $package_list\n", 2);
+    $err = system("sudo apt install $package_list");
+    if ($err) {
+        whoa_wait();
+        exit $err / 255;
+    }
+
+    # for my $package (@packages) {
+    #     logprint("[$package]", 2);
+    #     # system("sudo apt install $package");
+    # }
+
+}
+# }}}
+
+mint();
