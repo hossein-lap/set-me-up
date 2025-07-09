@@ -2,8 +2,73 @@
 
 use warnings;
 use strict;
+use File::Path qw( make_path );
+use File::Fetch;
+use Archive::Tar;
+use File::Find;
+
+# # TODO
+# use LWP::Simple;
+# use Time::HiRes qw(sleep time);
+# use File::Temp qw(tempfile);
+# use IO::Socket::INET;
+# use HTTP::Request;
+# use HTTP::Response;
+
+# use IO::Socket::INET;
+# use IO::Socket::SSL;  # For HTTPS support
+# use threads;
+
+
+# use Term::ProgressBar;
+
+# variables {{{
+my $home = $ENV{'HOME'};
+my $root_dir = $home.'/.local/hos';
+my %path = (
+    tarball => $root_dir."/tarballs",
+    bin => $home.'/.bin';
+);
+# }}}
 
 # helper functions {{{
+
+# finder {{{
+sub wanted {
+    my $pattern = $_[0];
+    my $type = $_[1];
+    $type ||= 'f';
+
+    if ($type eq 'f') {
+        if (-f $File::Find::name && $File::Find::name =~ /$pattern/) {
+            return $File::Find::name;
+        }
+    } elsif ($type eq 'd') {
+        if (-d $File::Find::name && $File::Find::name =~ /$pattern/) {
+            return $File::Find::name;
+        }
+    }
+}
+# }}}
+
+# # spinner {{{
+# sub spinner {
+#     # my @spinner_chars = ('|', '/', '-', '\\');
+#     # my @spinner_chars = ('.', '!', '|', '+', '=', '#');
+#     my @spinner_chars = ('@', '#','@', '#','@', '#','@', '#',);
+#     my $i = 0;
+#     my $delay = 0.5;
+#
+#     while (1) {
+#         print "\r" . $spinner_chars[$i++ % @spinner_chars] . " Processing...";
+#         $| = $delay;  # Enable autoflush
+#         sleep($delay);  # Adjust the speed of the spinner
+#     }
+#
+# }
+# # }}}
+
+# logger {{{
 sub logprint {
     my $message = $_[0];
     my $level = $_[1];
@@ -16,7 +81,9 @@ sub logprint {
         die("$message\n");
     }
 }
+# }}}
 
+# funny messages {{{
 sub whoa_wait {
 my $whatnow;
     my @greetings = (
@@ -33,7 +100,9 @@ my $whatnow;
     );
     logprint("\n> $greetings[int rand@greetings]", 2);
 }
+# }}}
 
+# array to string {{{
 sub array_to_string {
     my @array = $_[0];
     my $string = join('\\n', @array);
@@ -44,139 +113,372 @@ sub array_to_string {
 }
 # }}}
 
+# # get file size before download {{{
+# sub get_file_size {
+#     my ($url) = @_;
+#     
+#     # Parse the URL
+#     my ($protocol, $host, $path) = $url =~ m{^(https?://)?([^/]+)(/.*)?$};
+#     $host =~ s{^https?://}{};  # Remove protocol
+#     my $port = $protocol ? 443 : 80;  # Use 443 for HTTPS, 80 for HTTP
+#
+#
+#     # Create a socket connection
+#     my $socket = IO::Socket::INET->new(
+#         PeerHost => $host,
+#         PeerPort => $port,
+#         Proto    => 'tcp',
+#     ) or die "Could not connect to $host: $!";
+#
+#     # Send a HEAD request
+#     print $socket "GET $path HTTP/1.0\r\n";
+#     print $socket "Host: $host\r\n";
+#     print $socket "User-Agent: PerlScript/1.0\r\n";  # Add User-Agent
+#     print $socket "Connection: close\r\n\r\n";
+#
+#
+#
+#     # Read the response
+#     my $response = '';
+#     while (<$socket>) {
+#         $response .= $_;
+#         last if /^\r\n$/;  # End of headers
+#     }
+#     close($socket);
+#
+#     print "Response Headers:\n$response\n";
+#
+#     # Extract Content-Length from the response headers
+#     if ($response =~ /Content-Length:\s*(\d+)/i) {
+#         return $1;  # Return the file size
+#     }
+#     return 0;  # Default to 0 if not found
+# }
+# # }}}
+
+# downloader {{{
+sub fetch {
+    unless (-d $root_dir) {
+        make_path($root_dir);
+    }
+    make_path($path{tarball});
+
+    my $url = $_[0];
+    my $name = $_[1];
+    my $output_file = $path{tarball};
+    my $ff = File::Fetch->new(uri => $url);
+    my $full_path = $output_file.'/'.$ff->file;
+
+    if (-f $full_path) {
+        logprint('file already exists', 2);
+        return $full_path;
+    }
+
+    printf('  %s at %s', $ff->file, $path{tarball});
+    print("\n");
+    printf('  url: %s', $url);
+    my $where = $ff->fetch(to => $path{tarball}) or die "\n".$ff->error;
+
+    # my $ff->output_file = $path{tarball}.$ff->file;
+    # my $file = $ff->fetch() or die $ff->error;
+    # my $fname = basename($where);
+    # rename $where, "$dir/$fname";
+
+    # print($ff->uri);
+    # print("\n");
+    # print($ff->scheme);
+    # print("\n");
+    # print($ff->host);
+    # print("\n");
+    # print($ff->path);
+    # print("\n");
+    # print($ff->file);
+    # print("\n");
+    # print($ff->output_file);
+    print("\n");
+
+    return $full_path;
+}
+# }}}
+
+# }}}
+
 # let's stay quiet for now
+
+# external tools {{{
+sub external_tools {
+    my %tool_list = (
+        typst  => "https://github.com/typst/typst/releases/download/v0.13.1/typst-x86_64-unknown-linux-musl.tar.xz",
+        jira   => "https://github.com/ankitpokhrel/jira-cli/releases/download/v1.6.0/jira_1.6.0_linux_x86_64.tar.gz",
+        v2raya => "https://github.com/v2rayA/v2rayA/releases/download/v2.2.6.7/v2raya_linux_x64_2.2.6.7",
+        gum    => "https://github.com/charmbracelet/gum/releases/download/v0.16.2/gum_0.16.2_Linux_x86_64.tar.gz",
+
+    );
+    my $total_files = scalar keys %tool_list;
+    my $file_count = 0;
+    my @tarballs;
+
+    while (my ($name, $url) = each %tool_list) {
+        $file_count++;
+        print("[$file_count/$total_files]: $name\n");
+        push(@tarballs, fetch($url, $name));
+    }
+    print "\nDownload completed.\n";
+
+    # TODO:
+    # 1. get the basename and dirname
+    # 2. maybe return value of `fetch` should change
+    for my $tarball (@tarballs) {
+        my $output_dir = dirname($tarball);
+        my $tar = Archive::Tar->new;
+        $tar->read($tarball);
+        $tar->extract($);
+        find(\&wanted(basename(), 'f'), '/path/to/search');
+    }
+
+    # while(my($name, $url) = each %tool_list) {
+    #     # print("name: [$name], url: [$url]");
+    #     fetch($url, $name);
+    # }
+    # print("\n");
+}
+# }}}
 
 # mint {{{
 sub mint {
     my $err;
 
     # package list {{{
-    my @packages = q(
+    my @packages = ();
+
+    # archive tools {{{
+    my @pkg_comp = q(
+        atool
+        arc
+        arj
+        lzip
+        lzop
+        nomarch
+        rar
+        rpm
+        unace
+        unalz
+        unrar
+        unzip
         7zip
-        ansible
-        aria2
-        asciidoctor
-        bc
-        btop
-        build-essential
         bzip2
-        curl
-        dmz-cursor-theme
+        p7zip
+        p7zip-full
+        xz-utils
+        zip
+        zstd
+    );
+    # }}}
+
+    # daily tools {{{
+    my @pkg_hos = q(
+        highlight
+        lynx
+        pwgen
+        links
+        build-essential
         ed
-        ffmpeg
-        ffmpegthumbnailer
-        fprintd
         fzf
-        g++
-        gcc
-        gimp
-        git
-        golang
-        gpg
-        gufw
-        imagemagick
-        imagemagick
+        bc
         jq
         lf
-        libyaml-tiny-perl
-        lm-sensors
-        lshw
-        lsof
-        lua5.1
-        lua5.2
-        lua5.3
-        lua5.4
-        lvm2
-        lynx
+        aria2
+        curl
+        asciidoctor
+        btop
+        ffmpeg
+        ffmpegthumbnailer
+        gpg
+        imagemagick
+        imagemagick
         make
         mg
         moreutils
         mupdf-tools
         neofetch
         neovim
-        net-tools
-        netcat-openbsd
-        nmap
         nnn
-        nodejs
-        npm
         nsxiv
-        ntfs-3g
-        onboard
-        openfortivpn
-        openssh-server
-        openvpn
-        p7zip
-        p7zip-full
         pandoc
         pass
         patch
         pinentry-curses
+        rsync
+        tmux
+        tmuxinator
+        udisks2
+        vim
+        wget
+        xclip
+        xsel
+        xwallpaper
+        yad
+        yq
+        yt-dlp
+        zathura
+        zathura-pdf-poppler
+        zsh
+        qrencode
+        simplescreenrecorder
+        sshfs
+    );
+    # }}}
+
+    # misc {{{
+    my @pkg_misc = q(
+        qt5-gtk-platformtheme
+        qt5-gtk2-platformtheme
+        qt5-style-plugin-cleanlooks
+        qt5-style-plugins
+        dmz-cursor-theme
+        fprintd
+        gimp
+        gufw
+        ufw
+        lm-sensors
+        ntfs-3g
+        lshw
+        lsof
+        lvm2
+        net-tools
+        netcat-openbsd
+        nmap
+        openfortivpn
+        openconnect
+        openssh-server
+        openvpn
+        onboard
+    );
+    # }}}
+
+    # vm/lxc {{{
+    my @pkg_isolate = q(
+        podman
+        docker-compose
+        docker-buildx
+        docker.io
+        ansible
+        qemu-system
+        qemu-utils
+        virt-manager
+        virt-viewer
+    );
+    # }}}
+
+    # LaTeX {{{
+    my @pkg_tex = q(
+        texlive-fonts-recommended
+        texlive-latex-base
+        texlive-latex-extra
+        texlive-latex-recommended
+        texlive-xetex
+    );
+    # }}}
+
+    # dev tools {{{
+    my @pkg_dev = q(
+        g++
+        gcc
+        git
+        golang
+        libyaml-tiny-perl
+        lua5.1
+        lua5.2
+        lua5.3
+        lua5.4
+        nodejs
+        npm
         pipx
         pkg-config
         pkgconf
         pkgconf-bin
         python-is-python3
         python3
-        qemu-system
-        qemu-utils
-        qrencode
-        qt5-gtk-platformtheme
-        qt5-gtk2-platformtheme
-        qt5-style-plugin-cleanlooks
-        qt5-style-plugins
+        python3-pip
+        python3-venv
         rake
-        rsync
         ruby
         ruby-asciidoctor
         ruby-asciidoctor-include-ext
         ruby-asciidoctor-pdf
         ruby-pygments.rb
         ruby-rouge
-        simplescreenrecorder
-        sshfs
-        texlive-fonts-recommended
-        texlive-latex-base
-        texlive-latex-extra
-        texlive-latex-recommended
-        texlive-xetex
-        tmux
-        tmuxinator
-        udisks2
-        ufw
-        unrar
-        unzip
-        vim
-        virt-manager
-        virt-viewer
-        wget
-        xclip
-        xsel
-        xwallpaper
-        xz-utils
-        yad
-        yq
-        yt-dlp
-        zathura
-        zathura-pdf-poppler
-        zip
-        zsh
-        zstd
+        tree-sitter-cli
     );
+    # }}}
+
+    # header files {{{
+    my @pkg_header = q(
+        libcairo2-dev
+        libcrypt-dev
+        libfreetype-dev
+        libfribidi-dev
+        libgraphite2-dev
+        libharfbuzz-dev
+        libjpeg-turbo8-dev
+        libncurses-dev
+        libplayerctl-dev
+        libpng-dev
+        libstartup-notification0-dev
+        libx11-dev
+        libx11-xcb-dev
+        libxcb-cursor-dev
+        libxcb-icccm4-dev
+        libxcb-image0-dev
+        libxcb-keysyms1-dev
+        libxcb-randr0-dev
+        libxcb-render-util0-dev
+        libxcb-render0-dev
+        libxcb-shape0-dev
+        libxcb-shm0-dev
+        libxcb-util-dev
+        libxcb-util0-dev
+        libxcb-xfixes0-dev
+        libxcb-xinerama0-dev
+        libxcb-xkb-dev
+        libxcb-xrm-dev
+        libxcb-xtest0-dev
+        libxcb1-dev
+        libxdg-basedir-dev
+        libxdmcp-dev
+        libxext-dev
+        libxft-dev
+        libxinerama-dev
+        libxkbcommon-dev
+        libxkbcommon-x11-dev
+        libxml2-dev
+        libxrandr-dev
+        libxrender-dev
+        libyaml-dev
+    );
+    # }}}
+
+    push(@packages, @pkg_dev);
+    push(@packages, @pkg_hos);
+    push(@packages, @pkg_comp);
+    push(@packages, @pkg_misc);
+    push(@packages, @pkg_header);
+    # push(@packages, @pkg_tex);
+    push(@packages, @pkg_isolate);
     # }}}
 
     my $package_list = array_to_string(@packages);
 
-    # logprint("\n==== Updating Repositories ====\n", 2);
-    # $err = system("sudo", "apt", "update", "-y");
-    # if ($err) {
-    #     whoa_wait();
-    #     exit $err / 255;
-    # }
+    logprint("\n==== Updating Repositories ====\n", 2);
+    $err = system("sudo", "apt", "update", "-y");
+    if ($err) {
+        whoa_wait();
+        exit $err / 255;
+    }
 
     logprint("\n==== Installing Packages ====\n", 2);
-    logprint("sudo apt install $package_list\n", 2);
-    $err = system("sudo apt install $package_list");
+    logprint("sudo apt-get install $package_list\n", 2);
+    $err = system("sudo apt-get install $package_list");
     if ($err) {
         whoa_wait();
         exit $err / 255;
@@ -190,4 +492,7 @@ sub mint {
 }
 # }}}
 
-mint();
+# mint();
+external_tools();
+# spinner();
+
