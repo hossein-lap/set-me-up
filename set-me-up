@@ -6,6 +6,14 @@ use File::Path qw( make_path );
 use File::Fetch;
 use Archive::Tar;
 use File::Find;
+use File::Basename;
+use LWP::UserAgent;
+use HTTP::Request;
+use IO::Handle;
+use Term::ANSIColor;
+
+$| = 1;  # or
+STDOUT->autoflush(1);
 
 # # TODO
 # use LWP::Simple;
@@ -27,7 +35,7 @@ my $home = $ENV{'HOME'};
 my $root_dir = $home.'/.local/hos';
 my %path = (
     tarball => $root_dir."/tarballs",
-    bin => $home.'/.bin';
+    bin => $home.'/.bin',
 );
 # }}}
 
@@ -79,6 +87,7 @@ sub logprint {
         warn("$message\n");
     } elsif ($level eq 3) {
         die("$message\n");
+        return;
     }
 }
 # }}}
@@ -98,7 +107,7 @@ my $whatnow;
         'So that how it ends',
         'hmmm...',
     );
-    logprint("\n> $greetings[int rand@greetings]", 2);
+    warn("\n> $greetings[int rand@greetings]");
 }
 # }}}
 
@@ -167,17 +176,28 @@ sub fetch {
     my $name = $_[1];
     my $output_file = $path{tarball};
     my $ff = File::Fetch->new(uri => $url);
-    my $full_path = $output_file.'/'.$ff->file;
+    my $file = basename($url);
+    my $full_name = $output_file.'/'.$ff->file;
 
-    if (-f $full_path) {
-        logprint('file already exists', 2);
-        return $full_path;
+    my $return_value = {
+        name => $name,
+        url => $url,
+        file => $ff->file,
+        full_name => $full_name,
+    };
+
+    if (-f $full_name) {
+        print("[".color("bold blue")."ignore".color("reset")."] file already exists ");
+        return $return_value;
     }
 
-    printf('  %s at %s', $ff->file, $path{tarball});
-    print("\n");
-    printf('  url: %s', $url);
-    my $where = $ff->fetch(to => $path{tarball}) or die "\n".$ff->error;
+    # printf('  %s at %s', $file, $path{tarball});
+    # print("\n");
+    # printf('  url: %s', $url);
+
+    # my $where = $ff->fetch(to => $path{tarball}) or logprint($ff->error, 2);  # fetch
+
+    # print("\tname: $name, url: $url\n");
 
     # my $ff->output_file = $path{tarball}.$ff->file;
     # my $file = $ff->fetch() or die $ff->error;
@@ -195,9 +215,9 @@ sub fetch {
     # print($ff->file);
     # print("\n");
     # print($ff->output_file);
-    print("\n");
+    # print("\n");
 
-    return $full_path;
+    return $return_value;
 }
 # }}}
 
@@ -207,34 +227,117 @@ sub fetch {
 
 # external tools {{{
 sub external_tools {
+    # this needs some manual interventions due to fixed versions
     my %tool_list = (
-        typst  => "https://github.com/typst/typst/releases/download/v0.13.1/typst-x86_64-unknown-linux-musl.tar.xz",
-        jira   => "https://github.com/ankitpokhrel/jira-cli/releases/download/v1.6.0/jira_1.6.0_linux_x86_64.tar.gz",
-        v2raya => "https://github.com/v2rayA/v2rayA/releases/download/v2.2.6.7/v2raya_linux_x64_2.2.6.7",
-        gum    => "https://github.com/charmbracelet/gum/releases/download/v0.16.2/gum_0.16.2_Linux_x86_64.tar.gz",
-
+        typst  => {
+            api_url => 'https://api.github.com/repos/typst/typst/releases/latest',
+            file_regex => qr/typst-x86_64-unknown-linux-musl\.tar\.xz/,
+        },
+        jira   => {
+            api_url => 'https://api.github.com/repos/ankitpokhrel/jira-cli/releases/latest',
+            file_regex => qr/jira_(\d+\.\d+\.\d+)_linux_x86_64\.tar\.gz/,
+        },
+        v2raya => {
+            api_url => 'https://api.github.com/repos/v2rayA/v2rayA/releases/latest',
+            file_regex => qr/v2raya_linux_x64_(\d+\.\d+\.\d+\.\d+)/,
+        },
+        gum    => {
+            api_url => 'https://api.github.com/repos/charmbracelet/gum/releases/latest',
+            file_regex => qr/gum_(\d+\.\d+\.\d+)_Linux_x86_64\.tar\.gz/,
+        },
+        # go => {
+        #     url => 'https://go.dev/dl/',
+        #     regex => qr/go(\d+\.\d+\.\d+)\.linux-amd64\.tar\.gz/,
+        # },
     );
-    my $total_files = scalar keys %tool_list;
-    my $file_count = 0;
+    my $ua = LWP::UserAgent->new;
+    my $total_tools = scalar(keys %tool_list);
+    my $tool_count = 0;
     my @tarballs;
+    my $length = 0;
 
-    while (my ($name, $url) = each %tool_list) {
-        $file_count++;
-        print("[$file_count/$total_files]: $name\n");
-        push(@tarballs, fetch($url, $name));
+    while (my ($tool, $info) = each %tool_list) {
+        my $tl = length($tool);
+        if ($tl gt $length) {
+            $length = $tl;
+        }
     }
-    print "\nDownload completed.\n";
 
-    # TODO:
-    # 1. get the basename and dirname
-    # 2. maybe return value of `fetch` should change
-    for my $tarball (@tarballs) {
-        my $output_dir = dirname($tarball);
-        my $tar = Archive::Tar->new;
-        $tar->read($tarball);
-        $tar->extract($);
-        find(\&wanted(basename(), 'f'), '/path/to/search');
+    while (my ($tool, $info) = each %tool_list) {
+        $tool_count++;
+        my $current_length = $length - length($tool) + 1;
+        print("fetch [$tool_count/$total_tools] $tool"." "x$current_length." ");
+        if (exists $info->{api_url}) {
+            my $response = $ua->get($info->{api_url});
+            if ($response->is_success) {
+                my $content = $response->decoded_content;
+                my @download_urls;
+                while ($content =~ /"browser_download_url":"([^"]*)/g) {
+                    push(@download_urls, $1);
+                }
+                foreach my $download_url (@download_urls) {
+                    if ($download_url =~ $info->{file_regex}) {
+                        push(@tarballs, fetch($download_url, $tool));
+                        last;
+                    }
+                }
+                print("[".color("bold green")."success".color("reset")."]");
+            } else {
+                print("[".color("bold red")."failure".color("reset")."] ".$response->status_line);
+            }
+        } elsif (exists $info->{url}) {
+            # fetch from go.dev
+            my $response = $ua->get($info->{url});
+            if ($response->is_success) {
+                my $content = $response->decoded_content;
+                if ($content =~ $info->{regex}) {
+                    my $version = $1;
+                    my $download_url = "$info->{url}/go$version.linux-amd64.tar.gz";
+                    push(@tarballs, fetch($download_url, $tool));
+                } else {
+                    print "failed to find version for $tool";
+                }
+                print("\rdone");
+            } else {
+                print("failed: ", $response->status_line);
+            }
+        } else {
+            print("failed: no API URL or direct URL for $tool");
+        }
+        print("\n");
     }
+
+    print("\nfetch download completed\n");
+
+    # for my $tarball (@tarballs) {
+    #     print("$tarball");
+    # }
+
+    # # TODO:
+    # # 1. get the basename and dirname
+    # # 2. maybe return value of `fetch` should change
+    # for my $tarball (@tarballs) {
+    #     my $output_dir = dirname($tarball);
+    #     my $tar = Archive::Tar->new;
+    #     $tar->read($tarball);
+    #     $tar->extract($);
+    #     find(\&wanted(basename(), 'f'), '/path/to/search');
+    # }
+
+    for my $content (@tarballs) {
+        for my $key (keys %$content) {
+            my $file      = $key->{file};
+            my $name      = $key->{name};
+            my $url       = $key->{url};
+            my $full_name = $key->{full_name};
+
+            print(" > file:      $file\n");
+            print(" > name:      $name\n");
+            print(" > url:       $url\n");
+            print(" > full_name: $full_name\n");
+        }
+    }
+
 
     # while(my($name, $url) = each %tool_list) {
     #     # print("name: [$name], url: [$url]");
@@ -469,15 +572,15 @@ sub mint {
 
     my $package_list = array_to_string(@packages);
 
-    logprint("\n==== Updating Repositories ====\n", 2);
+    warn("\n==== Updating Repositories ====\n");
     $err = system("sudo", "apt", "update", "-y");
     if ($err) {
         whoa_wait();
         exit $err / 255;
     }
 
-    logprint("\n==== Installing Packages ====\n", 2);
-    logprint("sudo apt-get install $package_list\n", 2);
+    warn("\n==== Installing Packages ====\n");
+    warn("sudo apt-get install $package_list\n");
     $err = system("sudo apt-get install $package_list");
     if ($err) {
         whoa_wait();
@@ -485,7 +588,7 @@ sub mint {
     }
 
     # for my $package (@packages) {
-    #     logprint("[$package]", 2);
+    #     warn("[$package]");
     #     # system("sudo apt install $package");
     # }
 
