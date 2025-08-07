@@ -1,3 +1,30 @@
 = Simple Script to setup the system
 
 Nothing more to say _yet_
+
+== TODO:
+
+.all
+====
+. install commands
+. system configs (e.g. fonts)
+. configs -- partally done (`stow`)
+. scripts -- partally done (`stow`)
+. manage external tools (e.g. `glab`) which may not be available in official repos
+====
+
+.ubuntu
+====
+. neovim ppa
+. suckless tools -- build dependency
+====
+
+.redhat
+====
+. package names
+====
+
+.arch
+====
+. package names
+====

@@ -45,6 +45,7 @@ sub array_to_string {
 # }}}
 
 # let's stay quiet for now
+
 # mint {{{
 sub mint {
     my $err;
