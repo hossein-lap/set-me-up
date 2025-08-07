@@ -4,27 +4,31 @@ Nothing more to say _yet_
 
 == TODO:
 
+.WIP
+====
+* [ ] manage external tools (e.g. `glab`) which may not be available in official repos
+====
+
 .all
 ====
-. install commands
-. system configs (e.g. fonts)
-. configs -- partally done (`stow`)
-. scripts -- partally done (`stow`)
-. manage external tools (e.g. `glab`) which may not be available in official repos
+* [ ] install commands
+* [ ] system configs (e.g. fonts)
+* [ ] configs -- partally done (`stow`)
+* [ ] scripts -- partally done (`stow`)
 ====
 
 .ubuntu
 ====
-. neovim ppa
-. suckless tools -- build dependency
+* [ ] neovim ppa
+* [x] suckless tools -- build dependency
 ====
 
 .redhat
 ====
-. package names
+* [ ] package names
 ====
 
 .arch
 ====
-. package names
+* [ ] package names
 ====
