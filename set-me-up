@@ -4,13 +4,17 @@ use warnings;
 use strict;
 use File::Path qw( make_path );
 use File::Fetch;
-use Archive::Tar;
+# use Archive::Tar;
+# use IO::Uncompress::Gunzip;
+# use IO::Uncompress::AnyUncompress;
+# use IO::Uncompress::AnyUncompress qw(anyuncompress $AnyUncompressError);
 use File::Find;
 use File::Basename;
 use LWP::UserAgent;
 use HTTP::Request;
 use IO::Handle;
 use Term::ANSIColor;
+use List::Util qw(max);
 
 $| = 1;  # or
 STDOUT->autoflush(1);
@@ -32,6 +36,8 @@ STDOUT->autoflush(1);
 # # }}}
 
 # variables {{{
+my $prompt = basename($0);
+my $steps = 0;
 my $home = $ENV{'HOME'};
 my $root_dir = $home.'/.local/set-me-up';
 my %path = (
@@ -134,7 +140,7 @@ my $whatnow;
         'So that how it ends',
         'hmmm...',
     );
-    warn("\n> $greetings[int rand@greetings]");
+    print(STDERR "\n> $greetings[int rand@greetings]\n");
 }
 # }}}
 
@@ -222,7 +228,7 @@ sub fetch {
     # print(STDERR "\n");
     # printf(STDERR '  url: %s', $url);
 
-    # my $where = $ff->fetch(to => $path{tarball}) or logprint($ff->error, 2);  # fetch
+    my $where = $ff->fetch(to => $path{tarball}) or logprint($ff->error, 2);  # fetch
 
     # print(STDERR "\tname: $name, url: $url\n");
 
@@ -259,32 +265,108 @@ sub get_url_from_json_response {
 }
 # }}}
 
+# archive and compression {{{
+sub unarchive {
+    my ($file_input, $file_output) = @_;
+    my @cmd;
+    if ($file_input =~ /\.tar/) {
+        @cmd = ("tar", "-xf", "$file_input", "-C", "$file_output");
+    } elsif ($file_input =~ /\.zip/) {
+        @cmd = ("unzip", "xf", "$file_input", "-d", "$file_output");
+    } elsif ($file_input =~ /\.rar/) {
+        @cmd = ("unrar", "x", "$file_input", "-ad", "$file_output");
+    } else {
+        return 1;
+    }
+    my $status = system(@cmd);
+    if ($status) {
+        return 0;
+    }
+}
+
+sub decompress {
+    my ($file_input) = @_;
+    my @cmd;
+    if ($file_input =~ /\.xz$/) {
+        @cmd = ("unxz", "$file_input");
+    } elsif ($file_input =~ /\.gz$/) {
+        @cmd = ("gunzip", "$file_input");
+    } elsif ($file_input =~ /\.zstd$/) {
+        @cmd = ("unzstd", "$file_input");
+    } elsif ($file_input =~ /\.bz2/) {
+        @cmd = ("unbzip2", "$file_input");
+    } else {
+        return 1;
+    }
+    my $status = system(@cmd);
+    if ($status) {
+        return 0;
+    }
+}
+# }}}
+
+# live log {{{
+sub live_log {
+    my $steps = $_[1];
+    my $tool_count = $_[2];
+    my $total_tools = $_[3];
+    my $stage = $_[4];
+    my $tool = $_[5];
+    my $current_length = $_[6];
+
+    printf(STDERR '%s [%s] [%s/%s] %s %s%s',
+        color("bold cyan").$prompt.color("reset"),
+        $steps,
+        $tool_count,
+        $total_tools,
+        color("bold magenta").$stage.color("reset"),
+        $tool,
+        " "x$current_length
+    );
+}
+# }}}
+
 # }}}
 
 # }}}
 
 # let's stay quiet for now
 
+my $length = 0;
+
+while (my ($tool, $info) = each %tool_list) {
+    my $tl = length($tool);
+    if ($tl gt $length) {
+        $length = $tl;
+    }
+}
+
 # external tools {{{
 sub external_tools {
     my $ua = LWP::UserAgent->new;
+    my @tarballs;
+    my @installs;
+
+    @tarballs = fetch_tools($ua);
+    @installs = extract_tools(\@tarballs);
+    install_tools(\@installs);
+}
+# }}}
+
+# fetch tools {{{
+sub fetch_tools {
+    my ($ua) = @_;
     my $total_tools = scalar(keys %tool_list);
     my $tool_count = 0;
     my @tarballs;
-    my $length = 0;
+    $steps++;  # 1
 
-    while (my ($tool, $info) = each %tool_list) {
-        my $tl = length($tool);
-        if ($tl gt $length) {
-            $length = $tl;
-        }
-    }
-
-    warn("\n==== Fetch External Tools ====\n\n");
+    print(STDERR "\n==== Fetch External Tools ====\n\n");
     while (my ($tool, $info) = each %tool_list) {
         $tool_count++;
-        my $current_length = $length - length($tool) + 1;
-        print(STDERR "fetch [$tool_count/$total_tools] $tool"." "x$current_length." ");
+        my $current_length = max(0, $length - length($tool) + 1);
+        live_log($prompt, $steps, $tool_count, $total_tools, "fetch", $tool, $current_length);
+        
         if (exists $info->{api_url}) {
             my $response = $ua->get($info->{api_url});
             if ($response->is_success) {
@@ -293,7 +375,7 @@ sub external_tools {
                     my @download_urls = get_url_from_json_response($json);
                     foreach my $tool_url (@download_urls) {
                         if ($tool_url =~ /$tool_list{$tool}{file_regex}/) {
-                            push(@tarballs, fetch($tool_url, $tool));
+                            push(@tarballs, fetch($tool_url, $tool));  # fetch
                             last;
                         }
                     }
@@ -303,14 +385,13 @@ sub external_tools {
                 print(STDERR "[".color("bold red")."failure".color("reset")."] ".$response->status_line);
             }
         } elsif (exists $info->{url}) {
-            # fetch from go.dev
             my $response = $ua->get($info->{url});
             if ($response->is_success) {
                 my $content = $response->decoded_content;
                 if ($content =~ $info->{regex}) {
                     my $version = $1;
                     my $download_url = "$info->{url}/go$version.linux-amd64.tar.gz";
-                    push(@tarballs, fetch($download_url, $tool));
+                    push(@tarballs, fetch($download_url, $tool));  # fetch
                 } else {
                     print(STDERR "failed to find version for $tool");
                 }
@@ -323,48 +404,81 @@ sub external_tools {
         }
         print(STDERR "\n");
     }
-
     print(STDERR "\nfetch download completed\n");
+    return @tarballs;
+}
+# }}}
+# extract tools {{{
+sub extract_tools {
+    my ($tarballs_ref) = @_;
+    my $total_tools = scalar(@$tarballs_ref);
+    my $tool_count = 0;
+    my @installs;
+    $steps++;  # 2
 
-    for my $tarball (@tarballs) {
-        print(STDERR "$tarball");
+    print(STDERR "\n==== Extract External Tools ====\n\n");
+    for my $content (@$tarballs_ref) {
+        $tool_count++;
+        my $full_name = $content->{full_name};
+        my $tool      = $content->{name};
+        my $current_length = max(0, $length - length($tool) + 1);
+        live_log($prompt, $steps, $tool_count, $total_tools, "extract", $tool, $current_length);
+        unless (-e $full_name) {
+            print(STDERR "[".color("bold red")."failure".color("reset")."]: ".$!, "\n");
+            next;
+        }
+
+        my $extract_path = dirname($full_name);
+        my $status = decompress($full_name);
+        if ($status) {
+            print(STDERR "[".color("bold yellow")."decompress".color("reset")."] ready to install ");
+            $status = unarchive($full_name, $extract_path);
+        }
+        if ($status) {
+            print(STDERR "[".color("bold green")."success".color("reset")."]");
+            push(@installs, $full_name);
+        }
+        print(STDERR "\n");
     }
+    print(STDERR "\nextracting tarballs finished\n");
+    return @installs;
+}
 
-    # # TODO:
-    # # 1. get the basename and dirname
-    # # 2. maybe return value of `fetch` should change
-    # for my $tarball (@tarballs) {
-    #     my $output_dir = dirname($tarball);
-    #     my $tar = Archive::Tar->new;
-    #     $tar->read($tarball);
-    #     $tar->extract($);
-    #     find(\&wanted(basename(), 'f'), '/path/to/search');
-    # }
+# }}}
+# install tools {{{
+sub install_tools {
+    my ($installs_ref) = @_;
+    my $tool_count = 0;
+    my $total_tools = scalar(@$installs_ref);
+    $steps++;  # 3
 
-    # for my $content (@tarballs) {
-    #     print($content." -- ");
-    #     for my $key (keys %$content) {
-    #         # print($key." == ");
-    #         # my $file      = $key->{file};
-    #         # my $name      = $key->{name};
-    #         # my $url       = $key->{url};
-    #         # # my $full_name = $key->{full_name};
-    #         #
-    #         # print(STDERR " > file:      $file\n");
-    #         # print(STDERR " > name:      $name\n");
-    #         # print(STDERR " > url:       $url\n");
-    #         # # print(STDERR " > full_name: $full_name\n");
-    #     }
-    #     print("\n");
-    # }
-    # print("\n");
+    print(STDERR "\n==== Install External Tools ====\n\n");
+    for my $tool (@$installs_ref) {
+        $tool_count++;
+        my $current_length = max(0, $length - length($tool) + 1);
+        live_log($prompt, $steps, $tool_count, $total_tools, "install", $tool, $current_length);
+        
+        # Here you would implement the installation logic for each tool
+        # For example, you might want to move the binary to a specific directory
+        # or run an installation script if applicable.
+        
+        # Example installation logic (this is just a placeholder):
+        my $install_status = install_binary($tool);
+        if ($install_status) {
+            print(STDERR "[".color("bold green")."success".color("reset")."]");
+        } else {
+            print(STDERR "[".color("bold red")."failure".color("reset")."]");
+        }
+        print(STDERR "\n");
+    }
+    print(STDERR "\ninstalling tools finished\n");
+}
 
-
-    # while(my($name, $url) = each %tool_list) {
-    #     # print(STDERR "name: [$name], url: [$url]");
-    #     fetch($url, $name);
-    # }
-    # print(STDERR "\n");
+sub install_binary {
+    my ($binary) = @_;
+    # Implement the actual installation logic here
+    # This is a placeholder function that should return true on success
+    return 1;  # Change this to actual installation logic
 }
 # }}}
 
@@ -447,6 +561,7 @@ sub mint {
         zathura
         zathura-pdf-poppler
         zsh
+        zsh-antigen
         qrencode
         simplescreenrecorder
         sshfs
@@ -593,15 +708,15 @@ sub mint {
 
     my $package_list = array_to_string(@packages);
 
-    warn("\n==== Updating Repositories ====\n\n");
+    print(STDERR "\n==== Updating Repositories ====\n\n");
     $err = system("sudo", "apt-get", "update", "-y");
     if ($err) {
         whoa_wait();
         exit $err / 255;
     }
 
-    warn("\n==== Installing Packages ====\n\n");
-    warn("sudo apt-get install $package_list\n");
+    print(STDERR "\n==== Installing Packages ====\n\n");
+    print(STDERR "sudo apt-get install $package_list\n");
     $err = system("sudo", "apt-get", "install", "$package_list");
     if ($err) {
         whoa_wait();
@@ -609,7 +724,7 @@ sub mint {
     }
 
     # for my $package (@packages) {
-    #     warn("[$package]");
+    #     print(STDERR "[$package]");
     #     # system("sudo apt install $package");
     # }
 
