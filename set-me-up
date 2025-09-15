@@ -10,8 +10,8 @@ use File::Fetch;
 # use IO::Uncompress::AnyUncompress qw(anyuncompress $AnyUncompressError);
 use File::Find;
 use File::Basename;
-use LWP::UserAgent;
-use HTTP::Request;
+# use LWP::UserAgent;
+# use HTTP::Request;
 use IO::Handle;
 use Term::ANSIColor;
 use List::Util qw(max);
@@ -110,18 +110,19 @@ sub wanted {
 # # }}}
 
 # logger {{{
-sub logprint {
-    my $message = $_[0];
-    my $level = $_[1];
+sub logger {
+    my ($prefix, $message, $level) = @_;
+    $level //= 1;
 
-    if ($level eq 1) {
-        print("$message\n");
-    } elsif ($level eq 2) {
-        print(STDERR "$message\n");
-    } elsif ($level eq 3) {
-        print(STDERR "$message\n");
-        return;
-    }
+    my $msg = sprintf('[%s %s]',
+        $prefix,
+        $message,
+    );
+
+    print($msg);
+    print(" ");
+
+    exit 1 if $level gt 2;
 }
 # }}}
 
@@ -129,16 +130,16 @@ sub logprint {
 sub whoa_wait {
 my $whatnow;
     my @greetings = (
-        'Alright.',
-        'Whoa wait',
-        'What happend?',
-        'Are you Okay?',
-        'Fine.',
-        'I\'m not gonna do anything',
-        'It is what it is',
-        'After you!',
-        'So that how it ends',
-        'hmmm...',
+        "Alright.",
+        "Whoa wait",
+        "What happend?",
+        "Are you Okay?",
+        "Fine.",
+        "I'm not gonna do anything",
+        "It is what it is",
+        "After you!",
+        "So that how it ends",
+        "hmmm...",
     );
     print(STDERR "\n> $greetings[int rand@greetings]\n");
 }
@@ -490,210 +491,211 @@ sub mint {
     my @packages = ();
 
     # archive tools {{{
-    my @pkg_comp = q(
-        atool
-        arc
-        arj
-        lzip
-        lzop
-        nomarch
-        rar
-        rpm
-        unace
-        unalz
-        unrar
-        unzip
-        7zip
-        bzip2
-        p7zip
-        p7zip-full
-        xz-utils
-        zip
-        zstd
+    my @pkg_comp = (
+        "atool",
+        "arc",
+        "arj",
+        "lzip",
+        "lzop",
+        "nomarch",
+        "rar",
+        "rpm",
+        "unace",
+        "unalz",
+        "unrar",
+        "unzip",
+        "7zip",
+        "bzip2",
+        "p7zip",
+        "p7zip-full",
+        "xz-utils",
+        "zip",
+        "zstd",
     );
     # }}}
 
     # daily tools {{{
-    my @pkg_hos = q(
-        highlight
-        lynx
-        pwgen
-        links
-        build-essential
-        ed
-        fzf
-        bc
-        jq
-        lf
-        aria2
-        curl
-        asciidoctor
-        btop
-        ffmpeg
-        ffmpegthumbnailer
-        gpg
-        imagemagick
-        imagemagick
-        make
-        mg
-        moreutils
-        mupdf-tools
-        neofetch
-        neovim
-        nnn
-        nsxiv
-        pandoc
-        pass
-        patch
-        pinentry-curses
-        rsync
-        tmux
-        tmuxinator
-        udisks2
-        vim
-        wget
-        xclip
-        xsel
-        xwallpaper
-        yad
-        yq
-        yt-dlp
-        zathura
-        zathura-pdf-poppler
-        zsh
-        zsh-antigen
-        qrencode
-        simplescreenrecorder
-        sshfs
+    my @pkg_hos = (
+        "highlight",
+        "lynx",
+        "pwgen",
+        "links",
+        "build-essential",
+        "ed",
+        "fzf",
+        "bc",
+        "jq",
+        "lf",
+        "aria2",
+        "curl",
+        "asciidoctor",
+        "btop",
+        "ffmpeg",
+        "ffmpegthumbnailer",
+        "gpg",
+        "imagemagick",
+        "imagemagick",
+        "make",
+        "mg",
+        "moreutils",
+        "mupdf-tools",
+        "neofetch",
+        "neovim",
+        "nnn",
+        "nsxiv",
+        "pandoc",
+        "pass",
+        "patch",
+        "pinentry-curses",
+        "rsync",
+        "tmux",
+        "tmuxinator",
+        "udisks2",
+        "vim",
+        "wget",
+        "xclip",
+        "xsel",
+        "xwallpaper",
+        "yad",
+        "yq",
+        "yt-dlp",
+        "zathura",
+        "zathura-pdf-poppler",
+        "zsh",
+        "zsh-antigen",
+        "qrencode",
+        "simplescreenrecorder",
+        "sshfs",
     );
     # }}}
 
     # misc {{{
-    my @pkg_misc = q(
-        qt5-gtk-platformtheme
-        qt5-gtk2-platformtheme
-        qt5-style-plugin-cleanlooks
-        qt5-style-plugins
-        dmz-cursor-theme
-        fprintd
-        gimp
-        gufw
-        ufw
-        lm-sensors
-        ntfs-3g
-        lshw
-        lsof
-        lvm2
-        net-tools
-        netcat-openbsd
-        nmap
-        openfortivpn
-        openconnect
-        openssh-server
-        openvpn
-        onboard
+    my @pkg_misc = (
+        "qt5-gtk-platformtheme",
+        "qt5-gtk2-platformtheme",
+        "qt5-style-plugin-cleanlooks",
+        "qt5-style-plugins",
+        "dmz-cursor-theme",
+        "fprintd",
+        "gimp",
+        "gufw",
+        "ufw",
+        "lm-sensors",
+        "ntfs-3g",
+        "lshw",
+        "lsof",
+        "lvm2",
+        "net-tools",
+        "netcat-openbsd",
+        "nmap",
+        "openfortivpn",
+        "openconnect",
+        "openssh-server",
+        "openvpn",
+        "onboard",
     );
     # }}}
 
     # vm/lxc {{{
-    my @pkg_isolate = q(
-        podman
-        docker-compose
-        docker-buildx
-        docker.io
-        ansible
-        qemu-system
-        qemu-utils
-        virt-manager
-        virt-viewer
+    my @pkg_isolate = (
+        "podman",
+        "docker-compose",
+        "docker-buildx",
+        "docker.io",
+        "ansible",
+        "qemu-system",
+        "qemu-utils",
+        "virt-manager",
+        "virt-viewer",
     );
     # }}}
 
     # LaTeX {{{
-    my @pkg_tex = q(
-        texlive-fonts-recommended
-        texlive-latex-base
-        texlive-latex-extra
-        texlive-latex-recommended
-        texlive-xetex
+    my @pkg_tex = (
+        "texlive-fonts-recommended",
+        "texlive-latex-base",
+        "texlive-latex-extra",
+        "texlive-latex-recommended",
+        "texlive-xetex",
     );
     # }}}
 
     # dev tools {{{
-    my @pkg_dev = q(
-        g++
-        gcc
-        git
-        golang
-        libyaml-tiny-perl
-        lua5.1
-        lua5.2
-        lua5.3
-        lua5.4
-        nodejs
-        npm
-        pipx
-        pkg-config
-        pkgconf
-        pkgconf-bin
-        python-is-python3
-        python3
-        python3-pip
-        python3-venv
-        rake
-        ruby
-        ruby-asciidoctor
-        ruby-asciidoctor-include-ext
-        ruby-asciidoctor-pdf
-        ruby-pygments.rb
-        ruby-rouge
-        tree-sitter-cli
+    my @pkg_dev = (
+        "g++",
+        "gcc",
+        "git",
+        "golang",
+        "libyaml-tiny-perl",
+        "lua5.1",
+        "lua5.2",
+        "lua5.3",
+        "lua5.4",
+        "nodejs",
+        "npm",
+        "pipx",
+        "pkg-config",
+        "pkgconf",
+        "pkgconf-bin",
+        "python-is-python3",
+        "python3",
+        "python3-pip",
+        "python3-venv",
+        "python3-pygments",
+        "rake",
+        "ruby",
+        "ruby-asciidoctor",
+        "ruby-asciidoctor-include-ext",
+        "ruby-asciidoctor-pdf",
+        "ruby-pygments.rb",
+        "ruby-rouge",
+        "tree-sitter-cli",
     );
     # }}}
 
     # header files {{{
-    my @pkg_header = q(
-        libcairo2-dev
-        libcrypt-dev
-        libfreetype-dev
-        libfribidi-dev
-        libgraphite2-dev
-        libharfbuzz-dev
-        libjpeg-turbo8-dev
-        libncurses-dev
-        libplayerctl-dev
-        libpng-dev
-        libstartup-notification0-dev
-        libx11-dev
-        libx11-xcb-dev
-        libxcb-cursor-dev
-        libxcb-icccm4-dev
-        libxcb-image0-dev
-        libxcb-keysyms1-dev
-        libxcb-randr0-dev
-        libxcb-render-util0-dev
-        libxcb-render0-dev
-        libxcb-shape0-dev
-        libxcb-shm0-dev
-        libxcb-util-dev
-        libxcb-util0-dev
-        libxcb-xfixes0-dev
-        libxcb-xinerama0-dev
-        libxcb-xkb-dev
-        libxcb-xrm-dev
-        libxcb-xtest0-dev
-        libxcb1-dev
-        libxdg-basedir-dev
-        libxdmcp-dev
-        libxext-dev
-        libxft-dev
-        libxinerama-dev
-        libxkbcommon-dev
-        libxkbcommon-x11-dev
-        libxml2-dev
-        libxrandr-dev
-        libxrender-dev
-        libyaml-dev
+    my @pkg_header = (
+        "libcairo2-dev",
+        "libcrypt-dev",
+        "libfreetype-dev",
+        "libfribidi-dev",
+        "libgraphite2-dev",
+        "libharfbuzz-dev",
+        "libjpeg-turbo8-dev",
+        "libncurses-dev",
+        "libplayerctl-dev",
+        "libpng-dev",
+        "libstartup-notification0-dev",
+        "libx11-dev",
+        "libx11-xcb-dev",
+        "libxcb-cursor-dev",
+        "libxcb-icccm4-dev",
+        "libxcb-image0-dev",
+        "libxcb-keysyms1-dev",
+        "libxcb-randr0-dev",
+        "libxcb-render-util0-dev",
+        "libxcb-render0-dev",
+        "libxcb-shape0-dev",
+        "libxcb-shm0-dev",
+        "libxcb-util-dev",
+        "libxcb-util0-dev",
+        "libxcb-xfixes0-dev",
+        "libxcb-xinerama0-dev",
+        "libxcb-xkb-dev",
+        "libxcb-xrm-dev",
+        "libxcb-xtest0-dev",
+        "libxcb1-dev",
+        "libxdg-basedir-dev",
+        "libxdmcp-dev",
+        "libxext-dev",
+        "libxft-dev",
+        "libxinerama-dev",
+        "libxkbcommon-dev",
+        "libxkbcommon-x11-dev",
+        "libxml2-dev",
+        "libxrandr-dev",
+        "libxrender-dev",
+        "libyaml-dev",
     );
     # }}}
 
@@ -706,8 +708,6 @@ sub mint {
     push(@packages, @pkg_isolate);
     # }}}
 
-    my $package_list = array_to_string(@packages);
-
     print(STDERR "\n==== Updating Repositories ====\n\n");
     $err = system("sudo", "apt-get", "update", "-y");
     if ($err) {
@@ -716,8 +716,8 @@ sub mint {
     }
 
     print(STDERR "\n==== Installing Packages ====\n\n");
-    print(STDERR "sudo apt-get install $package_list\n");
-    $err = system("sudo", "apt-get", "install", "$package_list");
+    print(STDERR "sudo apt-get install @packages\n");
+    $err = system("sudo", "apt-get", "install", "@packages");
     if ($err) {
         whoa_wait();
         exit $err / 255;
@@ -731,7 +731,260 @@ sub mint {
 }
 # }}}
 
+# void {{{
+sub void {
+    my $subname = (caller(0))[3];
+    my $err;
+
+    # package list {{{
+    my @packages = ();
+
+    # archive tools {{{
+    my @pkg_comp = (
+        "atool",
+        "lzip",
+        "lzop",
+        "rpm",
+        "unrar",
+        "unzip",
+        "7zip",
+        "bzip2",
+        "p7zip",
+        # "p7zip-unrar",
+        "7zip-unrar",
+        "xz",
+        "zip",
+        "zstd",
+    );
+    # }}}
+
+    # daily tools {{{
+    my @pkg_hos = (
+        "fastfetch",
+        "onefetch",
+        "highlight",
+        "lynx",
+        "pwgen",
+        "links",
+        "ed",
+        "fzf",
+        "bc",
+        "jq",
+        "lf",
+        "aria2",
+        "curl",
+        "btop",
+        "ffmpeg",
+        "ffmpegthumbnailer",
+        "gnupg",
+        "ImageMagick",
+        "make",
+        "mg",
+        "moreutils",
+        "mupdf-tools",
+        "neofetch",
+        "neovim",
+        "nnn",
+        "nsxiv",
+        "pandoc",
+        "pass",
+        "patch",
+        "rsync",
+        "tmux",
+        "udisks2",
+        "vim",
+        "wget",
+        "xclip",
+        "xsel",
+        "xwallpaper",
+        "yad",
+        "yq",
+        "yt-dlp",
+        "zathura",
+        "zathura-pdf-poppler",
+        "zsh",
+        "qrencode",
+        "ssr",
+        "fuse-sshfs",
+    );
+    # }}}
+
+    # misc {{{
+    my @pkg_misc = (
+        "qt5-styleplugins",
+        "kf6-qqc2-desktop-style",
+        "breeze-qt5",
+        "breeze-qt6",
+        "xcursor-vanilla-dmz-aa",
+        "xcursor-vanilla-dmz",
+        "fprintd",
+        "gimp",
+        "gufw",
+        "ufw",
+        "lm_sensors",
+        "ntfs-3g",
+        "lshw",
+        "lsof",
+        "lvm2",
+        "net-tools",
+        "openbsd-netcat",
+        "nmap",
+        "openfortivpn",
+        "openconnect",
+        "openssh",
+        "openvpn",
+        "onboard",
+    );
+    # }}}
+
+    # vm/lxc {{{
+    my @pkg_isolate = (
+        "podman",
+        "docker-compose",
+        "docker-buildx",
+        "docker",
+        "ansible",
+        "qemu",
+        "qemu-img",
+        "qemu-tools",
+        "qemu-user",
+        "virt-manager",
+        "virt-viewer",
+    );
+    # }}}
+
+    # LaTeX {{{
+    my @pkg_tex = (
+        "texlive2025-bin-2025_2",
+    );
+    # }}}
+
+    # dev tools {{{
+    my @pkg_dev = (
+        "gcc",
+        "git",
+        "go",
+        "perl-YAML-LibYAML",
+        "perl-YAML-Tiny",
+        "lua51",
+        "lua52",
+        "lua53",
+        "lua54",
+        "nodejs",
+        "python3-pipx",
+        "pkg-config",
+        "pkgconf",
+        "python3",
+        "python3-pip",
+        "python3-Pygments",
+        "ruby",
+        "ruby-asciidoctor",
+        "tree-sitter",
+    );
+    # }}}
+
+    # header files {{{
+    my @pkg_header = (
+        "cairo-devel",
+        "freetype-devel",
+        "fribidi-devel",
+        "graphite-devel",
+        "harfbuzz-devel",
+        "libjpeg-turbo-devel",
+        "ncurses-devel",
+        "playerctl-devel",
+        "libpng-devel",
+        "startup-notification-devel",
+        "libX11-devel",
+        "libxcb-devel",
+        "xcb-util-cursor-devel",
+        "xcb-util-wm-devel",
+        "xcb-util-image-devel",
+        "xcb-util-keysyms-devel",
+        "xcb-util-renderutil-devel",
+        "libxshmfence-devel",
+        "xcb-util-image-devel",
+        "libXfixes-devel",
+        "libXinerama-devel",
+        "libxkbcommon-devel",
+        "libxkbfile-devel",
+        "xcb-util-xrm-devel",
+        "libxdg-basedir-devel",
+        "libXdmcp-devel",
+        "libXext-devel",
+        "libXft-devel",
+        "libxml2-devel",
+        "libXrandr-devel",
+        "libXrender-devel",
+        "libyaml-devel",
+    );
+    # }}}
+
+    push(@packages, @pkg_dev);
+    push(@packages, @pkg_hos);
+    push(@packages, @pkg_comp);
+    push(@packages, @pkg_misc);
+    push(@packages, @pkg_header);
+    push(@packages, @pkg_tex);
+    push(@packages, @pkg_isolate);
+    # }}}
+
+    # extra repos {{{
+    logger($subname, "enable extra repositories");
+    my $output = `sudo xbps-install -Syu void-repo-nonfree void-repo-multilib void-repo-multilib-nonfree`;
+    $err = $? >> 8;
+    if ($err) {
+        print("\n");
+        whoa_wait();
+        exit $err;
+    } else {
+        print("done\n");
+    }
+    logger($subname, "update repositories");
+    $output = `sudo xbps-install -Sy`;
+    $err = $? >> 8;
+    if ($err) {
+        print("\n");
+        whoa_wait();
+        exit $err;
+    } else {
+        print("done\n");
+    }
+    # }}}
+
+    # upgrade {{{
+    logger($subname, "system upgrade");
+    $output = `sudo xbps-install -Su`;
+    $err = $? >> 8;
+    if ($err) {
+        print("\n");
+        whoa_wait();
+        exit $err / 255;
+    } else {
+        print("done\n");
+    }
+    # }}}
+
+    # install {{{
+    logger($subname, "install packages from repository");
+    logger($subname, "\$ sudo xbps-install @packages");
+    print("\n");
+    $output = `sudo xbps-install @packages`;
+    $err = $? >> 8;
+    if ($err) {
+        print("\n");
+        whoa_wait();
+        exit $err / 255;
+    } else {
+        print("done\n");
+    }
+    # }}}
+
+}
+# }}}
+
 # mint();
-external_tools();
+void();
+# external_tools();
 # spinner();
 
