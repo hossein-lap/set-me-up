@@ -10,11 +10,13 @@ use File::Fetch;
 # use IO::Uncompress::AnyUncompress qw(anyuncompress $AnyUncompressError);
 use File::Find;
 use File::Basename;
+use IO::Select;
 # use LWP::UserAgent;
 # use HTTP::Request;
 use IO::Handle;
 use Term::ANSIColor;
 use List::Util qw(max);
+use POSIX 'WNOHANG';
 
 $| = 1;  # or
 STDOUT->autoflush(1);
@@ -731,10 +733,60 @@ sub mint {
 }
 # }}}
 
+# runner -- WIP {{{
+sub captivate {
+    my ($opts) = @_; # hashref
+    $opts ||= {};
+    my $command = $opts->{command}  // '';
+    my $message = $opts->{message}  // '';
+
+    my $output = IO::Select->new();
+    my $pid = open(my $fh, '-|', $command);
+    my $spinner = ['-', '\\', '|', '/'];
+    my $count = 0;
+    print "\r                                                            ";
+    while (1) {
+        # Check if the command is still running
+        my @ready = $output->can_read(0.1);
+        if ($pid) {
+            printf "\r[%s] %s ", $spinner->[$count % @$spinner], $message;
+            # sleep(1.0);
+            select(undef, undef, undef, 0.07);
+            $count++;
+        }
+        # Print the output as it comes in
+        if (@ready) {
+            while (my $line = <$fh>) {
+                printf '\n\r%s\n\r', "Output: $line"; # Update the line for nicer output
+            }
+        }
+        if (waitpid($pid, WNOHANG) == -1) {
+            last; # Command has finished
+        }
+    }
+    my $exit_status = $? >> 8;
+    # print " ";
+    my $status;
+    my $label;
+    if ($exit_status) {
+        $status = "failed";
+        $label  = "!";
+        # print "\n";
+        # whoa_wait();
+        # exit $exit_status / 255;
+    } else {
+        $status = "done";
+        $label  = "+";
+    }
+    printf "\r[%s] %s [%s]\n", $label, $message, $status;
+}
+# }}}
+
 # void {{{
 sub void {
     my $subname = (caller(0))[3];
     my $err;
+    my $cmd;
 
     # package list {{{
     my @packages = ();
@@ -782,7 +834,7 @@ sub void {
         "mg",
         "moreutils",
         "mupdf-tools",
-        "neofetch",
+        "fastfetch",
         "neovim",
         "nnn",
         "nsxiv",
@@ -924,60 +976,71 @@ sub void {
     push(@packages, @pkg_hos);
     push(@packages, @pkg_comp);
     push(@packages, @pkg_misc);
-    push(@packages, @pkg_header);
-    push(@packages, @pkg_tex);
+    # push(@packages, @pkg_header);
+    # push(@packages, @pkg_tex);
     push(@packages, @pkg_isolate);
     # }}}
 
     # extra repos {{{
-    logger($subname, "enable extra repositories");
-    my $output = `sudo xbps-install -Syu void-repo-nonfree void-repo-multilib void-repo-multilib-nonfree`;
-    $err = $? >> 8;
-    if ($err) {
-        print("\n");
-        whoa_wait();
-        exit $err;
-    } else {
-        print("done\n");
-    }
-    logger($subname, "update repositories");
-    $output = `sudo xbps-install -Sy`;
-    $err = $? >> 8;
-    if ($err) {
-        print("\n");
-        whoa_wait();
-        exit $err;
-    } else {
-        print("done\n");
-    }
+    # logger($subname, "enable extra repositories");
+    $cmd = "xbps-install -Syu void-repo-nonfree void-repo-multilib void-repo-multilib-nonfree";
+    captivate({
+        command => $cmd,
+        message => "$subname enable extra repositories",
+    });
+
+    # logger($subname, "update repositories");
+    $cmd = "xbps-install -Sy";
+    captivate({
+        command => $cmd,
+        message => "$subname update repositories",
+    });
     # }}}
 
     # upgrade {{{
-    logger($subname, "system upgrade");
-    $output = `sudo xbps-install -Su`;
-    $err = $? >> 8;
-    if ($err) {
-        print("\n");
-        whoa_wait();
-        exit $err / 255;
-    } else {
-        print("done\n");
-    }
+    # logger($subname, "system upgrade");
+
+    $cmd = "xbps-install -Su";
+    captivate({
+        command => $cmd,
+        message => "$subname system upgrade",
+    });
+
+    # $output = `sudo xbps-install -Su`;
+    # $err = $? >> 8;
+    # if ($err) {
+    #     print("\n");
+    #     whoa_wait();
+    #     exit $err / 255;
+    # } else {
+    #     print("done\n");
+    # }
+
     # }}}
 
     # install {{{
-    logger($subname, "install packages from repository");
-    logger($subname, "\$ sudo xbps-install @packages");
-    print("\n");
-    $output = `sudo xbps-install @packages`;
-    $err = $? >> 8;
-    if ($err) {
-        print("\n");
-        whoa_wait();
-        exit $err / 255;
-    } else {
-        print("done\n");
+
+    # logger($subname, "install packages from repository\n");
+    # logger($subname, "\$ sudo xbps-install @packages");
+    foreach my $pkg (@packages) {
+        $cmd = "xbps-install -y $pkg";
+        captivate({
+            command => $cmd,
+            message => "$cmd",
+        });
     }
+
+    # print("\n");
+    # $output = `sudo xbps-install @packages`;
+    # $err = $? >> 8;
+    # if ($err) {
+    #     print("\n");
+    #     whoa_wait();
+    #     exit $err / 255;
+    # } else {
+    #     print("done\n");
+    # }
+
     # }}}
 
 }
